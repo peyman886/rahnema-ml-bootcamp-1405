@@ -1,0 +1,21 @@
+# --- not published (yet) ---------------------------------------------------
+# My own run-of-show for the session.
+PRESENTER_NOTES.md
+PRESENTER_NOTES.*.md
+
+# Exercise answers. These go up after the in-person session, not before it.
+notebooks/01_exercises_solutions.ipynb
+
+# Case study on internal company data. Stays out until it is cleared for
+# release; it reads a Parquet cache that is not in this repo either.
+notebooks/03_case_study_qcommerce.ipynb
+
+# --- environment -----------------------------------------------------------
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.DS_Store
+.idea/
+.vscode/
