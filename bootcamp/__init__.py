@@ -10,6 +10,9 @@ from .cheatsheets import (
     pipeline_diagram,
     pipeline_anatomy,
     cv_schemes,
+    preprocessing_sheet,
+    feature_families,
+    metrics_sheet,
 )
 
 __all__ = [
@@ -18,4 +21,7 @@ __all__ = [
     "pipeline_diagram",
     "pipeline_anatomy",
     "cv_schemes",
+    "preprocessing_sheet",
+    "feature_families",
+    "metrics_sheet",
 ]

@@ -851,3 +851,226 @@ def cv_schemes(save_to=None, n_points=30, n_splits=5):
                  fontsize=17, fontweight="bold", color=INK, x=0.02, ha="left")
     fig.tight_layout(rect=(0, 0, 1, 0.94))
     return _save(fig, save_to)
+
+
+# --------------------------------------------------------------------------
+# Week 3: preprocessing, feature families, metrics
+# --------------------------------------------------------------------------
+
+def preprocessing_sheet(save_to=None):
+    """What you can do to a column before it reaches a model."""
+    fig, axes = plt.subplots(2, 3, figsize=(17, 9.6), facecolor="white")
+
+    blocks = [
+        ("1 · missing values", "blue", [
+            ("SimpleImputer(strategy=)", ['"median"   numeric, skewed', '"mean"     numeric, symmetric',
+                                          '"most_frequent"  categorical', '"constant", fill_value=0']),
+            ("KNNImputer()", ["borrows from similar rows", "slow, needs scaling first"]),
+            ("add_indicator=True", ["keeps a was-missing flag", "often worth more than the fill"]),
+        ], "Missingness is data. Before you fill, ask why it is missing."),
+
+        ("2 · scaling", "green", [
+            ("StandardScaler()", ["(x - mean) / sd", "the default"]),
+            ("RobustScaler()", ["uses median and IQR", "when outliers are real"]),
+            ("MinMaxScaler()", ["squashes to [0, 1]", "needs known bounds"]),
+            ("PowerTransformer()", ["makes it look normal", "for skewed money-like columns"]),
+        ], "Trees do not care. Linear models, SVMs and KNN care a lot."),
+
+        ("3 · categoricals", "orange", [
+            ("OneHotEncoder(", ['  handle_unknown="ignore",', '  min_frequency=20)']),
+            ("OrdinalEncoder()", ["only if the order is real", "small/medium/large, not city"]),
+            ("TargetEncoder()", ["high cardinality", "K-folds internally -- see nb 06"]),
+        ], "Cardinality decides. Under ~15 levels one-hot; above, encode."),
+
+        ("4 · skew and outliers", "purple", [
+            ("np.log1p(x)", ["money, counts, durations", "log1p handles the zeros"]),
+            ("QuantileTransformer()", ["forces a uniform/normal shape", "destroys the original units"]),
+            ("winsorise: s.clip(lo, hi)", ["caps instead of dropping", "decide the caps on TRAIN only"]),
+        ], "An outlier is either an error or the most important row. Decide which."),
+
+        ("5 · dates", "red", [
+            ("s.dt.hour / .dayofweek", ["never feed a raw timestamp", "a tree will split on the calendar"]),
+            ("cyclical: sin/cos", ["hour 23 is next to hour 0", "two columns per cycle"]),
+            ("days_since / days_until", ["holidays, launches, last event"]),
+        ], "A datetime is not a feature. What you extract from it is."),
+
+        ("6 · wiring it together", "grey", [
+            ("ColumnTransformer", ["one branch per kind of column", "unlisted columns are dropped"]),
+            ("Pipeline", ["preprocessing + model = one object", "fit learns, predict only applies"]),
+            ("make_column_selector(", ['  dtype_include=np.number)', "picks columns by dtype"]),
+        ], "If it learns anything from the data, it belongs inside the Pipeline."),
+    ]
+
+    for ax, (title, colour, entries, footer) in zip(axes.ravel(), blocks):
+        light, dark = ACCENTS[colour]
+        _panel(ax, title, (0, 13), (0, 11))
+        y = 10.0
+        for head, lines in entries:
+            ax.add_patch(Rectangle((0.2, y - 0.62 - 0.72 * len(lines)), 12.6,
+                                   0.75 + 0.72 * len(lines), facecolor=light,
+                                   edgecolor=dark, linewidth=1.1, zorder=1))
+            _code(ax, 0.45, y, head, color=dark, fontsize=9.8, weight="bold")
+            for j, line in enumerate(lines):
+                _code(ax, 0.75, y - 0.72 * (j + 1), line, fontsize=8.8)
+            y -= 1.05 + 0.72 * len(lines)
+        _note(ax, 0.2, 0.35, footer, color=dark, fontsize=9.2)
+
+    fig.suptitle("Preprocessing: what you can do to a column",
+                 fontsize=18, fontweight="bold", color=INK, x=0.02, ha="left")
+    fig.tight_layout(rect=(0, 0, 1, 0.955))
+    return _save(fig, save_to)
+
+
+# (family, what it answers, example columns, colour)
+_FEATURE_FAMILIES = [
+    ("lags", "what happened N days ago?", ["lag_1", "lag_7", "lag_28"], "blue"),
+    ("rolling windows", "what is the recent level?",
+     ["rolling_mean_lag1_7", "rolling_std_lag1_28"], "blue"),
+    ("exponential decay", "recent level, smoothly weighted", ["ewma_0.3", "ewma_0.7"], "blue"),
+    ("momentum", "is it rising or falling?", ["trend_7_28", "wow_change"], "blue"),
+    ("calendar", "what kind of day is it?",
+     ["dow", "month", "is_holiday", "is_weekend"], "green"),
+    ("cyclical encoding", "so hour 23 sits next to hour 0",
+     ["dow_sin", "dow_cos", "doy_sin"], "green"),
+    ("distance to events", "how close to a holiday?",
+     ["days_since_holiday", "days_until_holiday"], "green"),
+    ("payday / month shape", "when does money arrive?",
+     ["is_payday_window", "days_to_month_end"], "green"),
+    ("price and promo", "what are we charging today?",
+     ["is_promo", "discount_depth", "days_since_last_promo"], "orange"),
+    ("sparsity", "how often does this thing sell at all?",
+     ["zero_frac_28d", "consecutive_zeros", "days_since_last_sale"], "red"),
+    ("availability", "could the customer even buy it?",
+     ["is_stockout", "fill_rate_7d", "availability_roll28"], "red"),
+    ("target encoding", "what is this entity's own history?",
+     ["variant_te_mean", "variant_te_std"], "purple"),
+    ("hierarchy", "what is the parent doing?",
+     ["store_rolling_mean_7d", "variant_share_of_store"], "purple"),
+    ("lifecycle", "how old is this thing?",
+     ["days_since_launch", "is_new_product"], "purple"),
+]
+
+
+def feature_families(save_to=None):
+    """The families of features worth building on a panel, and what each answers."""
+    # The five blocks need ~12 units between them; the rule box sits below at
+    # y < 1.4, so the drawing area has to be taller than the blocks add up to.
+    fig, ax = plt.subplots(figsize=(16, 11.6), facecolor="white")
+    ax.set_xlim(0, 16)
+    ax.set_ylim(0, 14.4)
+    ax.axis("off")
+
+    groups = [("the target's own past", "blue", 0, 4),
+              ("time", "green", 4, 8),
+              ("what we did", "orange", 8, 9),
+              ("can it even sell?", "red", 9, 11),
+              ("other series", "purple", 11, 14)]
+
+    y = 13.9
+    for label, colour, lo, hi in groups:
+        light, dark = ACCENTS[colour]
+        block_h = 0.62 * (hi - lo) + 0.45
+        ax.add_patch(Rectangle((0.2, y - block_h + 0.1), 15.6, block_h,
+                               facecolor=light, edgecolor=dark, linewidth=1.3, zorder=1))
+        ax.text(0.45, y - 0.12, label.upper(), fontsize=9, fontweight="bold",
+                color=dark, va="top")
+        for k, (name, question, cols, _) in enumerate(_FEATURE_FAMILIES[lo:hi]):
+            row_y = y - 0.62 * (k + 1) - 0.05
+            _code(ax, 3.2, row_y, name, fontsize=10, weight="bold")
+            _note(ax, 6.5, row_y, question, fontsize=9.5, style="normal")
+            _code(ax, 10.6, row_y, "  ".join(cols)[:52], color=MUTED, fontsize=8.6)
+        y -= block_h + 0.25
+
+    red = ACCENTS["red"][1]
+    ax.add_patch(Rectangle((0.2, 0.15), 15.6, 1.15, facecolor=ACCENTS["red"][0],
+                           edgecolor=red, linewidth=1.5, zorder=2))
+    _code(ax, 0.5, 0.95, "The rule that governs every row above", color=red,
+          fontsize=10.5, weight="bold")
+    _note(ax, 0.5, 0.45,
+          "Every one of these must be computed from data strictly before the "
+          "day being predicted. In pandas that means .shift() before .rolling(), "
+          "every single time.", fontsize=9.8)
+
+    fig.suptitle("Feature families for a panel  —  one row per series per day",
+                 fontsize=18, fontweight="bold", color=INK, x=0.02, ha="left")
+    fig.tight_layout(rect=(0, 0, 1, 0.955))
+    return _save(fig, save_to)
+
+
+def metrics_sheet(save_to=None):
+    """Regression metrics, what each one hides, and where the business metric lives."""
+    fig, axes = plt.subplots(1, 2, figsize=(16, 8.2), facecolor="white",
+                             gridspec_kw={"width_ratios": [1.25, 1]})
+
+    ax = axes[0]
+    _panel(ax, "Pick the metric before you see the result", (0, 13), (0, 12.5))
+    rows = [
+        ("MAE", "mean |error|", "the typical miss, in real units", "blue"),
+        ("RMSE", "sqrt(mean error²)", "punishes big misses; outliers dominate", "blue"),
+        ("MAPE", "mean |error| / actual", "BROKEN when the actual can be 0", "red"),
+        ("WMAPE", "Σ|error| / Σactual", "MAPE's fix: one ratio over the whole set", "green"),
+        ("R²", "1 - SSE/SST", "share of variance explained; flatters big-variance data", "blue"),
+        ("Bias", "mean(pred - actual)", "are we systematically over or under?", "orange"),
+        ("Pinball", "asymmetric |error|", "for a quantile promise, not a point guess", "purple"),
+    ]
+    y = 11.4
+    for name, formula, note, colour in rows:
+        light, dark = ACCENTS[colour]
+        ax.add_patch(Rectangle((0.2, y - 0.72), 12.6, 1.28, facecolor=light,
+                               edgecolor=dark, linewidth=1.1, zorder=1))
+        _code(ax, 0.5, y + 0.2, name, color=dark, fontsize=11, weight="bold")
+        _code(ax, 2.6, y + 0.2, formula, fontsize=9.5)
+        _note(ax, 0.5, y - 0.35, note, fontsize=9.3)
+        y -= 1.55
+
+    _code(ax, 0.2, 0.7, "Two questions no metric answers for you:", fontsize=10, weight="bold")
+    _note(ax, 0.2, 0.15,
+          "over or under -- which error costs more?    and at what grain does the "
+          "decision actually get made?", fontsize=9.5)
+
+    ax = axes[1]
+    _panel(ax, "The grain the business decides at", (0, 11), (0, 12.5))
+    bl, bd = ACCENTS["blue"]
+    ol, od = ACCENTS["orange"]
+    gl, gd = ACCENTS["green"]
+
+    _code(ax, 0.3, 11.7, "the model predicts daily", fontsize=10.5, weight="bold")
+    for i in range(10):
+        ax.add_patch(Rectangle((0.3 + i * 1.02, 10.1), 0.92, 0.9,
+                               facecolor=bl, edgecolor=bd, linewidth=1.1))
+        ax.text(0.76 + i * 1.02, 10.55, "d", ha="center", va="center",
+                fontsize=8.5, color=bd, **MONO)
+
+    _arrow(ax, (5.4, 9.9), (5.4, 9.1), color=MUTED, lw=1.8)
+    _code(ax, 0.3, 8.6, "the buyer orders every 5 days", fontsize=10.5, weight="bold")
+    for i in range(2):
+        ax.add_patch(Rectangle((0.3 + i * 5.1, 7.1), 5.0, 0.9,
+                               facecolor=ol, edgecolor=od, linewidth=1.4))
+        ax.text(2.8 + i * 5.1, 7.55, f"planning window {i + 1}", ha="center",
+                va="center", fontsize=9, color=od, **MONO)
+
+    _note(ax, 0.3, 6.4,
+          "Daily errors cancel inside a window. A model that is 3 units high on\n"
+          "Monday and 3 low on Tuesday is perfect for the buyer and looks\n"
+          "mediocre on a daily MAE.", fontsize=9.5)
+
+    ax.add_patch(Rectangle((0.3, 2.5), 10.4, 3.3, facecolor=gl,
+                           edgecolor=gd, linewidth=1.5, zorder=1))
+    _code(ax, 0.6, 5.35, "what the window makes measurable", color=gd,
+          fontsize=10.5, weight="bold")
+    _code(ax, 0.6, 4.6, "overstock  = max(0, predicted - actual)", fontsize=9.8)
+    _note(ax, 0.6, 4.05, "stock that sat there. For fresh food, waste.", fontsize=9.2)
+    _code(ax, 0.6, 3.4, "understock = max(0, actual - predicted)", fontsize=9.8)
+    _note(ax, 0.6, 2.85, "orders you could not fill. Lost sale, unhappy customer.",
+          fontsize=9.2)
+
+    _note(ax, 0.3, 1.7,
+          "These two are not symmetric, and the ratio between their costs is a\n"
+          "business input, not something you can read off the data.", fontsize=9.5)
+    _code(ax, 0.3, 0.5, "Report the metric at the grain the decision is made at.",
+          color=ACCENTS["red"][1], fontsize=10, weight="bold")
+
+    fig.suptitle("Evaluating a forecast", fontsize=18, fontweight="bold",
+                 color=INK, x=0.02, ha="left")
+    fig.tight_layout(rect=(0, 0, 1, 0.95))
+    return _save(fig, save_to)

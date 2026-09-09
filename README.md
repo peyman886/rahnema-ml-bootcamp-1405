@@ -13,19 +13,25 @@ you install anything.
 | 01 | [`01_numpy_pandas_matplotlib_lab.ipynb`](notebooks/01_numpy_pandas_matplotlib_lab.ipynb) | the lab: NumPy, pandas, matplotlib and seaborn |
 | 02 | [`02_data_science_pipeline.ipynb`](notebooks/02_data_science_pipeline.ipynb) | the nine stages of a data science project, with EDA in depth |
 
-## Week 3 — scikit-learn, validation and leakage
+## Week 3 — scikit-learn, features, validation and metrics
 
-One continuous session with lunch in the middle: build a pipeline before the
-break, then spend the afternoon proving its score was too good.
+One continuous session with lunch in the middle. Each half pairs a concepts
+notebook with the same ideas applied to a real internal forecasting problem.
 
 | # | Notebook | What it is |
 |---|---|---|
-| 04 | [`04_sklearn_pipeline_lab.ipynb`](notebooks/04_sklearn_pipeline_lab.ipynb) | end to end on a messy table: metric, split, baseline, `ColumnTransformer`, `Pipeline`, cross-validation |
-| 05 | [`05_validation_and_leakage_workshop.ipynb`](notebooks/05_validation_and_leakage_workshop.ipynb) | four ways your score lies: future columns, group leakage, time leakage, target encoding — then feature engineering and error analysis |
+| 04 | [`04_preprocessing_and_features.ipynb`](notebooks/04_preprocessing_and_features.ipynb) | scikit-learn's one interface, the preprocessing menu, `ColumnTransformer` and `Pipeline`, and the families of features worth building |
+| 05 | *case study* | the same thing on a real demand-forecasting panel — 90% zeros, 1.8M rows, and two leaks found the hard way |
+| 06 | [`06_modelling_and_evaluation.ipynb`](notebooks/06_modelling_and_evaluation.ipynb) | fitting a model, four ways your score lies, which cross-validation scheme, which metric, error analysis |
+| 07 | *case study* | the real experiments — model ladder, time splits, WMAPE, overstock/understock, and the grain that reversed the ranking |
 
-Notebook 05 is the one to read if you only read one. Each leak is measured
+Notebook 06 is the one to read if you only read one. Each leak is measured
 rather than described, and the target-encoding section makes a column with
 literally zero information look like the best feature in the model.
+
+The two case-study notebooks read an internal dataset that is not in this
+repository, so they are shown in the session rather than published. Everything
+they demonstrate is in 04 and 06 with data you can run.
 
 Answers to the exercises are published here after the in-person session. Try
 them first.
@@ -62,6 +68,9 @@ you very little.
 | [`ds_pipeline.png`](assets/ds_pipeline.png) | the nine stages of a project |
 | [`pipeline_anatomy.png`](assets/pipeline_anatomy.png) | what `ColumnTransformer` + `Pipeline` do to your columns, and why it has to be one object |
 | [`cv_schemes.png`](assets/cv_schemes.png) | KFold / Stratified / Group / TimeSeries, drawn fold by fold |
+| [`preprocessing_sheet.png`](assets/preprocessing_sheet.png) | the menu: missing values, scaling, categoricals, skew, dates |
+| [`feature_families.png`](assets/feature_families.png) | the families of features worth building on a panel |
+| [`metrics_sheet.png`](assets/metrics_sheet.png) | regression metrics, what each hides, and the grain question |
 
 They are drawn by code rather than in a design tool, so they stay in version
 control and the numbers on them match the numbers the notebooks print. See
