@@ -8,6 +8,14 @@ from .cheatsheets import (
     numpy_cheatsheet,
     pandas_cheatsheet,
     pipeline_diagram,
+    pipeline_anatomy,
+    cv_schemes,
 )
 
-__all__ = ["numpy_cheatsheet", "pandas_cheatsheet", "pipeline_diagram"]
+__all__ = [
+    "numpy_cheatsheet",
+    "pandas_cheatsheet",
+    "pipeline_diagram",
+    "pipeline_anatomy",
+    "cv_schemes",
+]

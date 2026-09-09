@@ -635,3 +635,219 @@ def pipeline_diagram(save_to=None):
                  fontweight="bold", color=INK, loc="left", pad=14)
     fig.tight_layout()
     return _save(fig, save_to)
+
+
+# --------------------------------------------------------------------------
+# Week 3: the sklearn pipeline, and cross-validation schemes
+# --------------------------------------------------------------------------
+
+def pipeline_anatomy(save_to=None):
+    """What a ColumnTransformer + Pipeline actually does to your columns."""
+    fig, (ax, ax_fit) = plt.subplots(
+        2, 1, figsize=(15, 8.4), facecolor="white",
+        gridspec_kw={"height_ratios": [3.1, 1]})
+
+    ax.set_xlim(0, 30)
+    ax.set_ylim(0, 13.7)
+    ax.axis("off")
+
+    bl, bd = ACCENTS["blue"]
+    ol, od = ACCENTS["orange"]
+    gl, gd = ACCENTS["green"]
+    pl, pd_ = ACCENTS["purple"]
+
+    # --- the raw frame ----------------------------------------------------
+    cols = [("distance_km", "num"), ("basket_size", "num"), ("prep_minutes", "num"),
+            ("store", "cat"), ("weather", "cat"), ("courier_id", "high-card")]
+    kind_colour = {"num": (bl, bd), "cat": (ol, od), "high-card": (pl, pd_)}
+
+    _code(ax, 0.3, 13.0, "your DataFrame", fontsize=11, weight="bold")
+    for i, (name, kind) in enumerate(cols):
+        light, dark = kind_colour[kind]
+        y = 11.1 - i * 1.35
+        ax.add_patch(Rectangle((0.3, y - 0.5), 5.4, 1.0, facecolor=light,
+                               edgecolor=dark, linewidth=1.3, zorder=2))
+        _code(ax, 0.55, y, name, fontsize=10)
+
+    # --- the three branches ----------------------------------------------
+    # Explicit tops and heights rather than computed ones, so the boxes keep
+    # a visible gap between them however many steps each branch has.
+    branches = [
+        ("numeric", bl, bd, ["SimpleImputer(median)", "StandardScaler()"],
+         [0, 1, 2], 12.0, 3.1),
+        ("categorical", ol, od, ["SimpleImputer(most_frequent)",
+                                 'OneHotEncoder(', '    handle_unknown="ignore")'],
+         [3, 4], 8.2, 3.9),
+        ("high cardinality", pl, pd_, ["TargetEncoder()"], [5], 3.7, 2.3),
+    ]
+    for label, light, dark, steps, src_rows, ytop, h in branches:
+        ax.add_patch(Rectangle((9.0, ytop - h), 9.2, h, facecolor=light,
+                               edgecolor=dark, linewidth=1.6, zorder=2))
+        _code(ax, 9.3, ytop - 0.55, label, color=dark, fontsize=10.5, weight="bold")
+        for j, step in enumerate(steps):
+            _code(ax, 9.5, ytop - 1.25 - j * 0.85, step, fontsize=9.5)
+        for r in src_rows:
+            _arrow(ax, (5.9, 11.1 - r * 1.35), (8.9, ytop - h / 2), color=dark, lw=1.3)
+
+    _code(ax, 9.0, 13.0, "ColumnTransformer  —  one branch per kind of column",
+          fontsize=11, weight="bold")
+    _note(ax, 9.0, 12.4, "columns you do not list are dropped, silently", fontsize=9)
+
+    # --- concatenate + estimator -----------------------------------------
+    mid = 7.3
+    ax.add_patch(Rectangle((19.5, 1.4), 2.2, 11.0, facecolor=ACCENTS["grey"][0],
+                           edgecolor=ACCENTS["grey"][1], linewidth=1.4, zorder=2))
+    ax.text(20.6, mid, "hstack", rotation=90, ha="center", va="center",
+            fontsize=10, color=INK, **MONO)
+    for _, _, _, _, _, ytop, h in branches:
+        _arrow(ax, (18.3, ytop - h / 2), (19.4, mid), color=MUTED, lw=1.3)
+
+    ax.add_patch(Rectangle((23.0, mid - 1.9), 6.5, 3.8, facecolor=gl,
+                           edgecolor=gd, linewidth=1.8, zorder=2))
+    _code(ax, 23.3, mid + 1.2, "estimator", color=gd, fontsize=10.5, weight="bold")
+    _code(ax, 23.3, mid + 0.2, "HistGradientBoosting", fontsize=9.5)
+    _code(ax, 23.3, mid - 0.6, "Regressor()", fontsize=9.5)
+    _note(ax, 23.3, mid - 1.4, "or Ridge, or anything", fontsize=9)
+    _arrow(ax, (21.8, mid), (22.9, mid), color=MUTED, lw=1.6)
+
+    _code(ax, 19.5, 0.9, "Pipeline([('prep', ColumnTransformer(...)),",
+          fontsize=9.5, color=MUTED)
+    _code(ax, 19.5, 0.25, "          ('model', HistGradientBoostingRegressor())])",
+          fontsize=9.5, color=MUTED)
+
+    # --- why it has to be one object -------------------------------------
+    ax_fit.set_xlim(0, 30)
+    ax_fit.set_ylim(0, 3.4)
+    ax_fit.axis("off")
+
+    red = ACCENTS["red"][1]
+    ax_fit.add_patch(Rectangle((0.3, 0.2), 29.2, 2.9, facecolor=ACCENTS["red"][0],
+                               edgecolor=ACCENTS["red"][1], linewidth=1.4, zorder=1))
+    _code(ax_fit, 0.8, 2.55, "Why it has to be ONE object, and not four steps in a row",
+          color=red, fontsize=11, weight="bold")
+    _code(ax_fit, 0.8, 1.75,
+          "fit(X_train)      every step LEARNS from the training fold only   "
+          "(the median, the mean and sd, the category list)",
+          fontsize=9.5)
+    _code(ax_fit, 0.8, 1.05,
+          "predict(X_valid)  every step only APPLIES what it learned         "
+          "— nothing is re-fitted on data it should not have seen",
+          fontsize=9.5)
+    _note(ax_fit, 0.8, 0.5,
+          "Scale before you split and the validation set has already touched the model. "
+          "The Pipeline is what makes that impossible to do by accident.",
+          color=red, fontsize=9.5)
+
+    fig.suptitle("Pipeline + ColumnTransformer, end to end", fontsize=18,
+                 fontweight="bold", color=INK, x=0.02, ha="left")
+    fig.tight_layout(rect=(0, 0, 1, 0.95))
+    return _save(fig, save_to)
+
+
+# (name, description, "use when") for each splitter drawn below
+_CV_SCHEMES = [
+    ("KFold(shuffle=True)", "rows shuffled, then cut into k blocks",
+     "rows are independent and order does not matter", "blue"),
+    ("StratifiedKFold", "same, but each fold keeps the class balance",
+     "classification, especially with a rare class", "green"),
+    ("GroupKFold", "whole groups go to one side or the other",
+     "repeated units: same courier, user, patient, device", "purple"),
+    ("TimeSeriesSplit", "always train on the past, score the future",
+     "anything with a time order, or a trend", "orange"),
+]
+
+
+def cv_schemes(save_to=None, n_points=30, n_splits=5):
+    """The four cross-validation schemes you actually need, drawn."""
+    fig, axes = plt.subplots(len(_CV_SCHEMES), 1, figsize=(15, 10),
+                             facecolor="white")
+
+    rng = np.random.default_rng(0)
+    # A group label per row for GroupKFold, and a time order for the rest.
+    groups = np.repeat(np.arange(n_points // 3), 3)[:n_points]
+    # A minority class, marked with a dot. Drawn on the first two rows so the
+    # difference between KFold and StratifiedKFold is actually visible: plain
+    # KFold gives each fold whatever it happens to get, stratified gives every
+    # fold the same mix.
+    rare = np.arange(n_points) % 3 == 0
+
+    for ax, (name, how, when, colour) in zip(axes, _CV_SCHEMES):
+        light, dark = ACCENTS[colour]
+        ax.set_xlim(-17, n_points + 0.5)
+        ax.set_ylim(-0.8, n_splits + 0.4)
+        ax.axis("off")
+
+        for split in range(n_splits):
+            y = n_splits - 1 - split
+            if name.startswith("KFold"):
+                order = rng.permutation(n_points)
+                val = set(order[split::n_splits])
+            elif name.startswith("Stratified"):
+                # Split each class separately, then combine -- which is all
+                # that stratification is.
+                val = set()
+                for members in (np.where(rare)[0], np.where(~rare)[0]):
+                    shuffled = rng.permutation(members)
+                    val |= set(shuffled[split::n_splits])
+            elif name.startswith("Group"):
+                g_of_split = {g for g in np.unique(groups) if g % n_splits == split}
+                val = {i for i in range(n_points) if groups[i] in g_of_split}
+            else:  # TimeSeriesSplit: growing window, always forward
+                fold = n_points // (n_splits + 1)
+                train_end = fold * (split + 1)
+                val = set(range(train_end, train_end + fold))
+
+            for i in range(n_points):
+                if name.startswith("TimeSeries") and i >= max(val, default=0) + 1:
+                    face, edge = "white", "#e2e8f0"      # not used in this split yet
+                elif i in val:
+                    face, edge = dark, dark               # scored
+                else:
+                    face, edge = light, dark              # trained on
+                ax.add_patch(Rectangle((i + 0.06, y + 0.12), 0.88, 0.76,
+                                       facecolor=face, edgecolor=edge, linewidth=0.7))
+                if rare[i] and name.startswith(("KFold", "Stratified")):
+                    ax.plot(i + 0.5, y + 0.5, marker="o", ms=3.4,
+                            color="white" if i in val else dark, zorder=3)
+            label = f"split {split + 1}"
+            if name.startswith(("KFold", "Stratified")):
+                label += f"   {sum(rare[i] for i in val)}●"
+            ax.text(-0.6, y + 0.5, label, ha="right", va="center",
+                    fontsize=8.5, color=MUTED, **MONO)
+
+        ax.text(-16.8, n_splits - 0.7, name, fontsize=12, fontweight="bold",
+                color=dark, ha="left", va="center", **MONO)
+        ax.text(-16.8, n_splits - 1.55, how, fontsize=9.5, color=INK,
+                ha="left", va="center")
+        ax.text(-16.8, n_splits - 2.3, f"use when: {when}", fontsize=9.5,
+                color=MUTED, ha="left", va="center", fontstyle="italic")
+
+        if name.startswith("Group"):
+            # Show where the group boundaries fall, since that is the point.
+            for i in range(1, n_points):
+                if groups[i] != groups[i - 1]:
+                    ax.plot([i, i], [-0.35, n_splits], color=MUTED, lw=0.7,
+                            ls=":", alpha=0.8)
+            ax.text(n_points / 2, -0.55, "dotted lines = group boundaries",
+                    fontsize=8.5, color=MUTED, ha="center", fontstyle="italic")
+        if name.startswith("Stratified"):
+            ax.text(n_points / 2, -0.55,
+                    "every fold is scored on the same number of minority samples",
+                    fontsize=8.5, color=MUTED, ha="center", fontstyle="italic")
+        if name.startswith("KFold"):
+            ax.text(n_points / 2, -0.55,
+                    "● = minority class; the count per fold drifts on its own",
+                    fontsize=8.5, color=MUTED, ha="center", fontstyle="italic")
+
+    handles = [
+        Rectangle((0, 0), 1, 1, facecolor=ACCENTS["blue"][0], edgecolor=ACCENTS["blue"][1]),
+        Rectangle((0, 0), 1, 1, facecolor=ACCENTS["blue"][1], edgecolor=ACCENTS["blue"][1]),
+        Rectangle((0, 0), 1, 1, facecolor="white", edgecolor="#cbd5e1"),
+    ]
+    fig.legend(handles, ["trained on", "scored on", "not used in this split"],
+               loc="upper right", frameon=False, fontsize=10, ncol=3,
+               bbox_to_anchor=(0.99, 1.0))
+    fig.suptitle("Which cross-validation split?  —  one row per fold, one square per sample",
+                 fontsize=17, fontweight="bold", color=INK, x=0.02, ha="left")
+    fig.tight_layout(rect=(0, 0, 1, 0.94))
+    return _save(fig, save_to)

@@ -14,7 +14,8 @@ matplotlib.use("Agg")
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from bootcamp import numpy_cheatsheet, pandas_cheatsheet, pipeline_diagram
+from bootcamp import (numpy_cheatsheet, pandas_cheatsheet, pipeline_diagram,
+                      pipeline_anatomy, cv_schemes)
 
 ASSETS = Path(__file__).resolve().parents[1] / "assets"
 
@@ -23,7 +24,9 @@ def main() -> None:
     ASSETS.mkdir(exist_ok=True)
     for name, fn in [("numpy_cheatsheet", numpy_cheatsheet),
                      ("pandas_cheatsheet", pandas_cheatsheet),
-                     ("ds_pipeline", pipeline_diagram)]:
+                     ("ds_pipeline", pipeline_diagram),
+                     ("pipeline_anatomy", pipeline_anatomy),
+                     ("cv_schemes", cv_schemes)]:
         out = ASSETS / f"{name}.png"
         fn(save_to=out)
         print(f"wrote {out}")
