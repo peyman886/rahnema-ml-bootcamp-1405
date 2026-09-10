@@ -15,8 +15,10 @@ matplotlib.use("Agg")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from bootcamp import (numpy_cheatsheet, pandas_cheatsheet, pipeline_diagram,
-                      pipeline_anatomy, cv_schemes, preprocessing_sheet,
-                      feature_families, metrics_sheet)
+                      pipeline_anatomy, cv_schemes, sklearn_api,
+                      preprocessing_sheet, feature_families, metrics_sheet,
+                      leakage_gallery, scaling_matters, demand_problem,
+                      case_leak_stories)
 
 ASSETS = Path(__file__).resolve().parents[1] / "assets"
 
@@ -30,7 +32,12 @@ def main() -> None:
                      ("cv_schemes", cv_schemes),
                      ("preprocessing_sheet", preprocessing_sheet),
                      ("feature_families", feature_families),
-                     ("metrics_sheet", metrics_sheet)]:
+                     ("metrics_sheet", metrics_sheet),
+                     ("sklearn_api", sklearn_api),
+                     ("leakage_gallery", leakage_gallery),
+                     ("scaling_matters", scaling_matters),
+                     ("demand_problem", demand_problem),
+                     ("case_leak_stories", case_leak_stories)]:
         out = ASSETS / f"{name}.png"
         fn(save_to=out)
         print(f"wrote {out}")

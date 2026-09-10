@@ -745,7 +745,7 @@ def pipeline_anatomy(save_to=None):
 
 
 # (name, description, "use when") for each splitter drawn below
-_CV_SCHEMES = [
+_OLD_CV_SCHEMES = [
     ("KFold(shuffle=True)", "rows shuffled, then cut into k blocks",
      "rows are independent and order does not matter", "blue"),
     ("StratifiedKFold", "same, but each fold keeps the class balance",
@@ -755,171 +755,6 @@ _CV_SCHEMES = [
     ("TimeSeriesSplit", "always train on the past, score the future",
      "anything with a time order, or a trend", "orange"),
 ]
-
-
-def cv_schemes(save_to=None, n_points=30, n_splits=5):
-    """The four cross-validation schemes you actually need, drawn."""
-    fig, axes = plt.subplots(len(_CV_SCHEMES), 1, figsize=(15, 10),
-                             facecolor="white")
-
-    rng = np.random.default_rng(0)
-    # A group label per row for GroupKFold, and a time order for the rest.
-    groups = np.repeat(np.arange(n_points // 3), 3)[:n_points]
-    # A minority class, marked with a dot. Drawn on the first two rows so the
-    # difference between KFold and StratifiedKFold is actually visible: plain
-    # KFold gives each fold whatever it happens to get, stratified gives every
-    # fold the same mix.
-    rare = np.arange(n_points) % 3 == 0
-
-    for ax, (name, how, when, colour) in zip(axes, _CV_SCHEMES):
-        light, dark = ACCENTS[colour]
-        ax.set_xlim(-17, n_points + 0.5)
-        ax.set_ylim(-0.8, n_splits + 0.4)
-        ax.axis("off")
-
-        for split in range(n_splits):
-            y = n_splits - 1 - split
-            if name.startswith("KFold"):
-                order = rng.permutation(n_points)
-                val = set(order[split::n_splits])
-            elif name.startswith("Stratified"):
-                # Split each class separately, then combine -- which is all
-                # that stratification is.
-                val = set()
-                for members in (np.where(rare)[0], np.where(~rare)[0]):
-                    shuffled = rng.permutation(members)
-                    val |= set(shuffled[split::n_splits])
-            elif name.startswith("Group"):
-                g_of_split = {g for g in np.unique(groups) if g % n_splits == split}
-                val = {i for i in range(n_points) if groups[i] in g_of_split}
-            else:  # TimeSeriesSplit: growing window, always forward
-                fold = n_points // (n_splits + 1)
-                train_end = fold * (split + 1)
-                val = set(range(train_end, train_end + fold))
-
-            for i in range(n_points):
-                if name.startswith("TimeSeries") and i >= max(val, default=0) + 1:
-                    face, edge = "white", "#e2e8f0"      # not used in this split yet
-                elif i in val:
-                    face, edge = dark, dark               # scored
-                else:
-                    face, edge = light, dark              # trained on
-                ax.add_patch(Rectangle((i + 0.06, y + 0.12), 0.88, 0.76,
-                                       facecolor=face, edgecolor=edge, linewidth=0.7))
-                if rare[i] and name.startswith(("KFold", "Stratified")):
-                    ax.plot(i + 0.5, y + 0.5, marker="o", ms=3.4,
-                            color="white" if i in val else dark, zorder=3)
-            label = f"split {split + 1}"
-            if name.startswith(("KFold", "Stratified")):
-                label += f"   {sum(rare[i] for i in val)}●"
-            ax.text(-0.6, y + 0.5, label, ha="right", va="center",
-                    fontsize=8.5, color=MUTED, **MONO)
-
-        ax.text(-16.8, n_splits - 0.7, name, fontsize=12, fontweight="bold",
-                color=dark, ha="left", va="center", **MONO)
-        ax.text(-16.8, n_splits - 1.55, how, fontsize=9.5, color=INK,
-                ha="left", va="center")
-        ax.text(-16.8, n_splits - 2.3, f"use when: {when}", fontsize=9.5,
-                color=MUTED, ha="left", va="center", fontstyle="italic")
-
-        if name.startswith("Group"):
-            # Show where the group boundaries fall, since that is the point.
-            for i in range(1, n_points):
-                if groups[i] != groups[i - 1]:
-                    ax.plot([i, i], [-0.35, n_splits], color=MUTED, lw=0.7,
-                            ls=":", alpha=0.8)
-            ax.text(n_points / 2, -0.55, "dotted lines = group boundaries",
-                    fontsize=8.5, color=MUTED, ha="center", fontstyle="italic")
-        if name.startswith("Stratified"):
-            ax.text(n_points / 2, -0.55,
-                    "every fold is scored on the same number of minority samples",
-                    fontsize=8.5, color=MUTED, ha="center", fontstyle="italic")
-        if name.startswith("KFold"):
-            ax.text(n_points / 2, -0.55,
-                    "● = minority class; the count per fold drifts on its own",
-                    fontsize=8.5, color=MUTED, ha="center", fontstyle="italic")
-
-    handles = [
-        Rectangle((0, 0), 1, 1, facecolor=ACCENTS["blue"][0], edgecolor=ACCENTS["blue"][1]),
-        Rectangle((0, 0), 1, 1, facecolor=ACCENTS["blue"][1], edgecolor=ACCENTS["blue"][1]),
-        Rectangle((0, 0), 1, 1, facecolor="white", edgecolor="#cbd5e1"),
-    ]
-    fig.legend(handles, ["trained on", "scored on", "not used in this split"],
-               loc="upper right", frameon=False, fontsize=10, ncol=3,
-               bbox_to_anchor=(0.99, 1.0))
-    fig.suptitle("Which cross-validation split?  —  one row per fold, one square per sample",
-                 fontsize=17, fontweight="bold", color=INK, x=0.02, ha="left")
-    fig.tight_layout(rect=(0, 0, 1, 0.94))
-    return _save(fig, save_to)
-
-
-# --------------------------------------------------------------------------
-# Week 3: preprocessing, feature families, metrics
-# --------------------------------------------------------------------------
-
-def preprocessing_sheet(save_to=None):
-    """What you can do to a column before it reaches a model."""
-    fig, axes = plt.subplots(2, 3, figsize=(17, 9.6), facecolor="white")
-
-    blocks = [
-        ("1 · missing values", "blue", [
-            ("SimpleImputer(strategy=)", ['"median"   numeric, skewed', '"mean"     numeric, symmetric',
-                                          '"most_frequent"  categorical', '"constant", fill_value=0']),
-            ("KNNImputer()", ["borrows from similar rows", "slow, needs scaling first"]),
-            ("add_indicator=True", ["keeps a was-missing flag", "often worth more than the fill"]),
-        ], "Missingness is data. Before you fill, ask why it is missing."),
-
-        ("2 · scaling", "green", [
-            ("StandardScaler()", ["(x - mean) / sd", "the default"]),
-            ("RobustScaler()", ["uses median and IQR", "when outliers are real"]),
-            ("MinMaxScaler()", ["squashes to [0, 1]", "needs known bounds"]),
-            ("PowerTransformer()", ["makes it look normal", "for skewed money-like columns"]),
-        ], "Trees do not care. Linear models, SVMs and KNN care a lot."),
-
-        ("3 · categoricals", "orange", [
-            ("OneHotEncoder(", ['  handle_unknown="ignore",', '  min_frequency=20)']),
-            ("OrdinalEncoder()", ["only if the order is real", "small/medium/large, not city"]),
-            ("TargetEncoder()", ["high cardinality", "K-folds internally -- see nb 06"]),
-        ], "Cardinality decides. Under ~15 levels one-hot; above, encode."),
-
-        ("4 · skew and outliers", "purple", [
-            ("np.log1p(x)", ["money, counts, durations", "log1p handles the zeros"]),
-            ("QuantileTransformer()", ["forces a uniform/normal shape", "destroys the original units"]),
-            ("winsorise: s.clip(lo, hi)", ["caps instead of dropping", "decide the caps on TRAIN only"]),
-        ], "An outlier is either an error or the most important row. Decide which."),
-
-        ("5 · dates", "red", [
-            ("s.dt.hour / .dayofweek", ["never feed a raw timestamp", "a tree will split on the calendar"]),
-            ("cyclical: sin/cos", ["hour 23 is next to hour 0", "two columns per cycle"]),
-            ("days_since / days_until", ["holidays, launches, last event"]),
-        ], "A datetime is not a feature. What you extract from it is."),
-
-        ("6 · wiring it together", "grey", [
-            ("ColumnTransformer", ["one branch per kind of column", "unlisted columns are dropped"]),
-            ("Pipeline", ["preprocessing + model = one object", "fit learns, predict only applies"]),
-            ("make_column_selector(", ['  dtype_include=np.number)', "picks columns by dtype"]),
-        ], "If it learns anything from the data, it belongs inside the Pipeline."),
-    ]
-
-    for ax, (title, colour, entries, footer) in zip(axes.ravel(), blocks):
-        light, dark = ACCENTS[colour]
-        _panel(ax, title, (0, 13), (0, 11))
-        y = 10.0
-        for head, lines in entries:
-            ax.add_patch(Rectangle((0.2, y - 0.62 - 0.72 * len(lines)), 12.6,
-                                   0.75 + 0.72 * len(lines), facecolor=light,
-                                   edgecolor=dark, linewidth=1.1, zorder=1))
-            _code(ax, 0.45, y, head, color=dark, fontsize=9.8, weight="bold")
-            for j, line in enumerate(lines):
-                _code(ax, 0.75, y - 0.72 * (j + 1), line, fontsize=8.8)
-            y -= 1.05 + 0.72 * len(lines)
-        _note(ax, 0.2, 0.35, footer, color=dark, fontsize=9.2)
-
-    fig.suptitle("Preprocessing: what you can do to a column",
-                 fontsize=18, fontweight="bold", color=INK, x=0.02, ha="left")
-    fig.tight_layout(rect=(0, 0, 1, 0.955))
-    return _save(fig, save_to)
-
 
 # (family, what it answers, example columns, colour)
 _FEATURE_FAMILIES = [
@@ -949,7 +784,6 @@ _FEATURE_FAMILIES = [
     ("lifecycle", "how old is this thing?",
      ["days_since_launch", "is_new_product"], "purple"),
 ]
-
 
 def feature_families(save_to=None):
     """The families of features worth building on a panel, and what each answers."""
@@ -1073,4 +907,606 @@ def metrics_sheet(save_to=None):
     fig.suptitle("Evaluating a forecast", fontsize=18, fontweight="bold",
                  color=INK, x=0.02, ha="left")
     fig.tight_layout(rect=(0, 0, 1, 0.95))
+    return _save(fig, save_to)
+
+
+# --------------------------------------------------------------------------
+# scikit-learn: the interface, preprocessing, cross-validation
+# --------------------------------------------------------------------------
+
+def _sheet_panel(ax, title, entries, footer, colour, width=13.0, height=11.0):
+    """A panel of stacked code boxes with a footer line that always has room.
+
+    Each entry is (heading, [lines]). Boxes are laid out top-down with a fixed
+    gap, and the footer band at the bottom is reserved before anything is
+    drawn, so long panels cannot run into it.
+    """
+    light, dark = ACCENTS[colour]
+    _panel(ax, title, (0, width), (0, height))
+
+    FOOTER_BAND = 1.0
+    GAP = 0.42
+    LINE = 0.70
+    HEAD = 0.85
+
+    y = height - 1.1
+    for head, lines in entries:
+        box_h = HEAD + LINE * len(lines) + 0.25
+        ax.add_patch(Rectangle((0.25, y - box_h), width - 0.5, box_h,
+                               facecolor=light, edgecolor=dark, linewidth=1.15,
+                               zorder=1))
+        _code(ax, 0.55, y - 0.5, head, color=dark, fontsize=9.8, weight="bold")
+        for j, line in enumerate(lines):
+            _code(ax, 0.85, y - 0.5 - HEAD + 0.15 - LINE * j, line, fontsize=8.9)
+        y -= box_h + GAP
+
+    _note(ax, 0.25, FOOTER_BAND - 0.45, footer, color=dark, fontsize=9.3)
+
+
+def sklearn_api(save_to=None):
+    """One page on scikit-learn: the interface, and what lives behind it."""
+    fig, axes = plt.subplots(2, 3, figsize=(17, 10.4), facecolor="white")
+    ax = axes[0, 0]
+
+    # --- panel 1: the interface itself, drawn rather than listed -----------
+    _panel(ax, "1 · every object has the same methods", (0, 13), (0, 11))
+    bl, bd = ACCENTS["blue"]
+    gl, gd = ACCENTS["green"]
+
+    ax.add_patch(Rectangle((0.4, 7.4), 5.2, 2.6, facecolor=bl, edgecolor=bd,
+                           linewidth=1.6, zorder=2))
+    _code(ax, 0.7, 9.4, "transformer", color=bd, fontsize=10.5, weight="bold")
+    _code(ax, 0.7, 8.6, ".fit(X)", fontsize=9.5)
+    _code(ax, 0.7, 7.9, ".transform(X)", fontsize=9.5)
+
+    ax.add_patch(Rectangle((7.2, 7.4), 5.2, 2.6, facecolor=gl, edgecolor=gd,
+                           linewidth=1.6, zorder=2))
+    _code(ax, 7.5, 9.4, "model", color=gd, fontsize=10.5, weight="bold")
+    _code(ax, 7.5, 8.6, ".fit(X, y)", fontsize=9.5)
+    _code(ax, 7.5, 7.9, ".predict(X)", fontsize=9.5)
+
+    _note(ax, 0.4, 6.7, "a scaler, an encoder, a forest, a whole pipeline,")
+    _note(ax, 0.4, 6.1, "a grid search — all of them, without exception.")
+
+    ax.add_patch(Rectangle((0.4, 3.2), 12.0, 2.4, facecolor=ACCENTS["grey"][0],
+                           edgecolor=ACCENTS["grey"][1], linewidth=1.3, zorder=1))
+    _code(ax, 0.7, 5.0, "fit()      learn from THIS data and remember it", fontsize=9.3)
+    _code(ax, 0.7, 4.3, "transform()  apply what was remembered", fontsize=9.3)
+    _code(ax, 0.7, 3.6, "predict()    apply it and return an answer", fontsize=9.3)
+
+    _note(ax, 0.4, 2.2, "Learn the interface once and the whole library is", fontsize=9.5)
+    _note(ax, 0.4, 1.6, "already familiar — LightGBM and XGBoost too.", fontsize=9.5)
+    _code(ax, 0.4, 0.6, "fit_transform(X) = fit then transform, one call",
+          color=MUTED, fontsize=9)
+
+    _sheet_panel(axes[0, 1], "2 · transformers you will actually use", [
+        ("sklearn.impute", ["SimpleImputer(strategy='median')", "KNNImputer()"]),
+        ("sklearn.preprocessing", ["StandardScaler()   RobustScaler()",
+                                   "OneHotEncoder()    OrdinalEncoder()",
+                                   "TargetEncoder()    PowerTransformer()"]),
+        ("sklearn.compose", ["ColumnTransformer([...])",
+                             "make_column_selector(dtype_include=...)"]),
+    ], "Every one of them learns in fit() and applies in transform().", "blue")
+
+    _sheet_panel(axes[0, 2], "3 · models, in the order to try them", [
+        ("start here", ["DummyRegressor(strategy='median')",
+                        "DummyClassifier(strategy='prior')"]),
+        ("linear, fast, explainable", ["Ridge()   Lasso()   LogisticRegression()"]),
+        ("the tabular default", ["HistGradientBoostingRegressor()",
+                                 "HistGradientBoostingClassifier()",
+                                 "RandomForestRegressor()"]),
+    ], "A model that cannot beat Dummy is not a model, it is a bug.", "green")
+
+    _sheet_panel(axes[1, 0], "4 · splitting and searching", [
+        ("sklearn.model_selection", ["train_test_split(X, y, test_size=0.2)",
+                                     "cross_val_score(est, X, y, cv=5)",
+                                     "cross_validate(...)  # several metrics"]),
+        ("choosing the splitter", ["KFold   StratifiedKFold",
+                                   "GroupKFold   TimeSeriesSplit"]),
+        ("tuning", ["GridSearchCV(est, param_grid, cv=...)",
+                    "RandomizedSearchCV(...)  # usually better"]),
+    ], "Pass the Pipeline, never the bare model — see panel 6.", "orange")
+
+    _sheet_panel(axes[1, 1], "5 · measuring", [
+        ("regression", ["mean_absolute_error(y, p)",
+                        "root_mean_squared_error(y, p)", "r2_score(y, p)"]),
+        ("classification", ["accuracy_score   f1_score",
+                            "roc_auc_score    average_precision_score",
+                            "confusion_matrix(y, p)"]),
+        ("inside cross-validation", ["scoring='neg_mean_absolute_error'",
+                                     "# sklearn maximises, so losses are negated"]),
+    ], "Choose the metric before you see the first result.", "purple")
+
+    _sheet_panel(axes[1, 2], "6 · the three rules", [
+        ("split before you touch anything", ["train_test_split first, always"]),
+        ("anything that learns goes inside", ["Pipeline([('prep', ...), ('model', ...)])",
+                                              "so every fold re-learns it"]),
+        ("compare against a baseline", ["a number to beat, before you start"]),
+    ], "Break any of these and the score stops meaning anything.", "red")
+
+    fig.suptitle("scikit-learn in one page", fontsize=19, fontweight="bold",
+                 color=INK, x=0.02, ha="left")
+    fig.tight_layout(rect=(0, 0, 1, 0.955))
+    return _save(fig, save_to)
+
+
+def preprocessing_sheet(save_to=None):
+    """The menu of things you can do to a column before a model sees it."""
+    fig, axes = plt.subplots(2, 3, figsize=(17, 10.4), facecolor="white")
+
+    blocks = [
+        ("1 · missing values", "blue", [
+            ("SimpleImputer(strategy=...)", ['"median"   numeric, skewed',
+                                             '"mean"     numeric, symmetric',
+                                             '"most_frequent"   categorical']),
+            ("add_indicator=True", ["keeps a was-missing flag",
+                                    "often worth more than the fill"]),
+        ], "Missingness is data. Ask why it is missing before you fill it."),
+
+        ("2 · scaling", "green", [
+            ("StandardScaler()", ["(x - mean) / sd  — the default"]),
+            ("RobustScaler()", ["median and IQR", "when the outliers are real"]),
+            ("PowerTransformer()", ["makes a skewed column look normal"]),
+        ], "Trees do not care. Linear models, SVM and KNN care a lot."),
+
+        ("3 · categoricals", "orange", [
+            ("OneHotEncoder(", ['  handle_unknown="ignore",',
+                                '  min_frequency=20)']),
+            ("OrdinalEncoder()", ["only when the order is real:",
+                                  "small/medium/large, not city"]),
+            ("TargetEncoder()", ["for high cardinality"]),
+        ], "Under ~15 levels one-hot. Above that, encode."),
+
+        ("4 · skew and outliers", "purple", [
+            ("np.log1p(x)", ["money, counts, durations",
+                             "log1p survives the zeros"]),
+            ("s.clip(lo, hi)", ["caps instead of dropping",
+                                "pick the caps on TRAIN only"]),
+        ], "An outlier is an error or the most important row. Decide which."),
+
+        ("5 · dates", "red", [
+            ("s.dt.hour / .dayofweek", ["never feed a raw timestamp:",
+                                        "a tree will split on the calendar"]),
+            ("np.sin / np.cos", ["so hour 23 sits next to hour 0",
+                                 "two columns per cycle"]),
+        ], "A datetime is not a feature. What you pull out of it is."),
+
+        ("6 · wiring it together", "grey", [
+            ("ColumnTransformer", ["one branch per kind of column",
+                                   "unlisted columns are dropped"]),
+            ("Pipeline", ["preprocessing + model = one object",
+                          "fit learns, predict only applies"]),
+        ], "If a step learns from the data, it belongs in the Pipeline."),
+    ]
+
+    for ax, (title, colour, entries, footer) in zip(axes.ravel(), blocks):
+        _sheet_panel(ax, title, entries, footer, colour)
+
+    fig.suptitle("Preprocessing: the menu for one column", fontsize=19,
+                 fontweight="bold", color=INK, x=0.02, ha="left")
+    fig.tight_layout(rect=(0, 0, 1, 0.955))
+    return _save(fig, save_to)
+
+
+def cv_schemes(save_to=None):
+    """Which cross-validation split, decided by three questions."""
+    fig = plt.figure(figsize=(17, 9.6), facecolor="white")
+    gs = fig.add_gridspec(4, 2, width_ratios=[1.0, 2.35], hspace=0.62, wspace=0.02)
+
+    # ---------------- left: the decision, as three questions --------------
+    ax = fig.add_subplot(gs[:, 0])
+    ax.set_xlim(0, 10); ax.set_ylim(0, 13.4); ax.axis("off")
+    ax.text(0.2, 13.0, "Ask in this order", fontsize=13, fontweight="bold", color=INK)
+
+    steps = [
+        ("Do the rows have a\ntime order, and will you\ndeploy forward in time?",
+         "TimeSeriesSplit", "orange"),
+        ("Does one real entity\nproduce many rows?\n(user, patient, courier)",
+         "GroupKFold", "purple"),
+        ("Classification with\nan uncommon class?",
+         "StratifiedKFold", "green"),
+        ("None of the above.",
+         "KFold(shuffle=True)", "blue"),
+    ]
+    y = 12.2
+    for i, (question, answer, colour) in enumerate(steps):
+        light, dark = ACCENTS[colour]
+        ax.add_patch(Rectangle((0.2, y - 1.75), 9.4, 1.75, facecolor="white",
+                               edgecolor=BORDER, linewidth=1.2, zorder=2))
+        ax.text(0.5, y - 0.25, question, fontsize=9.6, color=INK, va="top", zorder=3)
+        ax.add_patch(Rectangle((0.2, y - 2.5), 9.4, 0.75, facecolor=light,
+                               edgecolor=dark, linewidth=1.4, zorder=2))
+        ax.text(0.5, y - 2.13, f"yes  →  {answer}" if i < 3 else answer,
+                fontsize=10, color=dark, va="center", fontweight="bold",
+                zorder=3, **MONO)
+        y -= 2.92
+
+    _note(ax, 0.2, 0.35, "Two can apply at once. Then you need both,\n"
+                         "and you write the splitter yourself.", fontsize=9.3)
+
+    # ---------------- right: what each one does to the rows ---------------
+    n, k = 12, 4
+    groups = np.repeat(np.arange(n // 3), 3)          # 4 entities, 3 rows each
+    minority = np.array([i % 3 == 0 for i in range(n)])  # 4 of them, one per fold
+    rng = np.random.default_rng(1)
+
+    schemes = [
+        ("TimeSeriesSplit", "orange", "train on the past, score the future"),
+        ("GroupKFold", "purple", "a whole entity is never on both sides"),
+        ("StratifiedKFold", "green", "every fold gets the same class mix"),
+        ("KFold(shuffle=True)", "blue", "rows land wherever they land"),
+    ]
+
+    for row, (name, colour, blurb) in enumerate(schemes):
+        ax = fig.add_subplot(gs[row, 1])
+        light, dark = ACCENTS[colour]
+        ax.set_xlim(-7.2, n + 0.4); ax.set_ylim(-1.5, k + 0.2); ax.axis("off")
+        ax.text(-7.0, k - 0.15, name, fontsize=12, fontweight="bold",
+                color=dark, va="top", **MONO)
+        ax.text(-7.0, k - 0.95, blurb, fontsize=9.4, color=MUTED, va="top",
+                fontstyle="italic")
+
+        for split in range(k):
+            y = k - 1 - split
+            if name.startswith("TimeSeries"):
+                size = n // (k + 1)
+                val = set(range(size * (split + 1), size * (split + 2)))
+                unused = set(range(max(val) + 1, n))
+            elif name.startswith("Group"):
+                val = {i for i in range(n) if groups[i] % k == split}
+                unused = set()
+            elif name.startswith("Stratified"):
+                val = set()
+                for members in (np.where(minority)[0], np.where(~minority)[0]):
+                    val |= set(rng.permutation(members)[split::k])
+                unused = set()
+            else:
+                val = set(rng.permutation(n)[split::k])
+                unused = set()
+
+            for i in range(n):
+                if i in unused:
+                    face, edge = "white", "#dfe6ee"
+                elif i in val:
+                    face, edge = dark, dark
+                else:
+                    face, edge = light, dark
+                ax.add_patch(Rectangle((i + 0.08, y + 0.12), 0.84, 0.76,
+                                       facecolor=face, edgecolor=edge, linewidth=1.0))
+                if name.startswith(("Stratified", "KFold")) and minority[i]:
+                    ax.plot(i + 0.5, y + 0.5, "o", ms=5,
+                            color="white" if i in val else dark, zorder=3)
+
+        # A caption under each block saying what to look at.
+        if name.startswith("Group"):
+            for i in range(1, n):
+                if groups[i] != groups[i - 1]:
+                    ax.plot([i, i], [-0.5, k], ls=":", lw=0.9, color=MUTED)
+            ax.text(n / 2, -1.05, "dotted lines separate entities — no entity is split",
+                    fontsize=8.8, color=MUTED, ha="center", fontstyle="italic")
+        elif name.startswith("Stratified"):
+            ax.text(n / 2, -1.05, "● = the uncommon class; every fold is scored on one",
+                    fontsize=8.8, color=MUTED, ha="center", fontstyle="italic")
+        elif name.startswith("KFold"):
+            ax.text(n / 2, -1.05, "● lands unevenly — fold 4 gets none of it",
+                    fontsize=8.8, color=MUTED, ha="center", fontstyle="italic")
+        else:
+            ax.text(n / 2, -1.05, "white = not used in that split; the window grows",
+                    fontsize=8.8, color=MUTED, ha="center", fontstyle="italic")
+
+    handles = [Rectangle((0, 0), 1, 1, facecolor=ACCENTS["blue"][0],
+                         edgecolor=ACCENTS["blue"][1]),
+               Rectangle((0, 0), 1, 1, facecolor=ACCENTS["blue"][1],
+                         edgecolor=ACCENTS["blue"][1])]
+    fig.legend(handles, ["trained on", "scored on"], loc="upper right",
+               frameon=False, fontsize=10, ncol=2, bbox_to_anchor=(0.99, 0.995))
+    fig.suptitle("Which cross-validation split?", fontsize=19, fontweight="bold",
+                 color=INK, x=0.02, ha="left")
+    # tight_layout cannot handle the spanning axes here; place it by hand.
+    fig.subplots_adjust(left=0.02, right=0.985, top=0.90, bottom=0.03)
+    return _save(fig, save_to)
+
+
+def leakage_gallery(save_to=None):
+    """The four ways a validation score lies, as one picture each."""
+    fig, axes = plt.subplots(2, 2, figsize=(16, 9.4), facecolor="white")
+    red, red_l = ACCENTS["red"][1], ACCENTS["red"][0]
+    ok, ok_l = ACCENTS["green"][1], ACCENTS["green"][0]
+    gy, gy_l = ACCENTS["grey"][1], ACCENTS["grey"][0]
+
+    # --- 1. a column recorded after the fact ------------------------------
+    ax = axes[0, 0]
+    _panel(ax, "1 · a column from the future", (0, 13), (0, 10))
+    # The arrow sits above the boxes, not through them.
+    ax.annotate("", xy=(12.2, 9.4), xytext=(1.2, 9.4),
+                arrowprops=dict(arrowstyle="-|>", color=MUTED, lw=1.6))
+    _code(ax, 0.3, 9.4, "time", color=MUTED, fontsize=9.5)
+    for x, label, colour, note in [(1.6, "order\nplaced", ok, "features\nfrom here"),
+                                   (6.2, "PREDICT\nhere", ACCENTS["blue"][1], ""),
+                                   (10.2, "delivered", red, "rating, tip,\nactual route")]:
+        c = ok_l if colour == ok else (red_l if colour == red else ACCENTS["blue"][0])
+        ax.add_patch(Rectangle((x - 0.9, 7.7), 2.4, 1.4, facecolor=c,
+                               edgecolor=colour, linewidth=1.5, zorder=2))
+        ax.text(x + 0.3, 8.4, label, ha="center", va="center", fontsize=9,
+                color=colour, zorder=3, **MONO)
+        if note:
+            ax.text(x + 0.3, 6.9, note, ha="center", va="top", fontsize=8.8, color=colour)
+    _code(ax, 0.6, 4.6, "the test:", fontsize=10, weight="bold")
+    _note(ax, 0.6, 3.9, "not \"does it help the score\" — a useless illegal", fontsize=9.5)
+    _note(ax, 0.6, 3.2, "column helps nothing and is still illegal.", fontsize=9.5)
+    ax.add_patch(Rectangle((0.5, 1.2), 12.0, 1.5, facecolor=red_l,
+                           edgecolor=red, linewidth=1.4, zorder=1))
+    _code(ax, 0.8, 1.95, "was this value written before the prediction moment?",
+          color=red, fontsize=10, weight="bold")
+
+    # --- 2. group leakage -------------------------------------------------
+    ax = axes[0, 1]
+    _panel(ax, "2 · the same entity on both sides", (0, 13), (0, 10))
+    rng = np.random.default_rng(0)
+    for row, (title, colour, split_by_group) in enumerate(
+            [("shuffled: courier C1 lands on both sides", red, False),
+             ("grouped: C1 is only ever on one side", ok, True)]):
+        y = 7.4 - row * 3.6
+        _code(ax, 0.5, y + 1.5, title, color=colour, fontsize=9.8, weight="bold")
+        for i in range(12):
+            group = i // 3
+            in_val = (i % 4 == 1) if not split_by_group else (group == 1)
+            face = colour if in_val else (red_l if colour == red else ok_l)
+            ax.add_patch(Rectangle((0.5 + i * 1.0, y), 0.9, 1.1, facecolor=face,
+                                   edgecolor=colour, linewidth=1.1))
+            ax.text(0.95 + i * 1.0, y + 0.55, f"C{group}", ha="center", va="center",
+                    fontsize=7.5, color="white" if in_val else colour, **MONO)
+    _note(ax, 0.5, 0.9, "The model memorises the courier instead of learning "
+                        "about deliveries.\nIt only matters if the id is in the "
+                        "feature list.", fontsize=9.3)
+
+    # --- 3. time leakage --------------------------------------------------
+    ax = axes[1, 0]
+    _panel(ax, "3 · shuffling rows that have an order", (0, 13), (0, 10))
+    for row, (title, colour, mode) in enumerate(
+            [("shuffled: the model interpolates", red, "shuffle"),
+             ("forward: the model extrapolates, like production", ok, "time")]):
+        y = 7.2 - row * 3.6
+        _code(ax, 0.5, y + 1.5, title, color=colour, fontsize=9.8, weight="bold")
+        val = set(rng.permutation(12)[:3]) if mode == "shuffle" else {9, 10, 11}
+        for i in range(12):
+            face = colour if i in val else (red_l if colour == red else ok_l)
+            ax.add_patch(Rectangle((0.5 + i * 1.0, y), 0.9, 1.1, facecolor=face,
+                                   edgecolor=colour, linewidth=1.1))
+        ax.annotate("", xy=(12.5, y - 0.35), xytext=(0.5, y - 0.35),
+                    arrowprops=dict(arrowstyle="-|>", color=MUTED, lw=1.2))
+    _note(ax, 0.5, 0.9, "A shuffled fold is surrounded by training data on both "
+                        "sides in time.\nProduction never is.", fontsize=9.3)
+
+    # --- 4. target encoding ----------------------------------------------
+    ax = axes[1, 1]
+    _panel(ax, "4 · the answer, folded into a feature", (0, 13), (0, 10))
+    rows = [("customer", "U01", "U01", "U01"), ("their sales", "12", "8", "4")]
+    for r, cells in enumerate(rows):
+        _code(ax, 0.5, 8.6 - r * 0.95, cells[0], fontsize=9.3, color=MUTED)
+        for c in range(1, 4):
+            ax.add_patch(Rectangle((3.6 + (c - 1) * 1.7, 8.15 - r * 0.95), 1.5, 0.8,
+                                   facecolor=gy_l, edgecolor=gy, linewidth=1.0))
+            ax.text(4.35 + (c - 1) * 1.7, 8.55 - r * 0.95, cells[c], ha="center",
+                    va="center", fontsize=9, **MONO)
+    ax.add_patch(Rectangle((3.6, 5.5), 5.1, 0.9, facecolor=red_l,
+                           edgecolor=red, linewidth=1.5, zorder=2))
+    ax.text(6.15, 5.95, "mean = 8", ha="center", va="center", fontsize=10,
+            color=red, zorder=3, **MONO)
+    _code(ax, 0.5, 5.95, "encoded as", fontsize=9.3, color=MUTED)
+    _note(ax, 0.5, 4.6, "Row 1's feature contains row 1's own answer — a third", fontsize=9.5)
+    _note(ax, 0.5, 3.9, "of it. With four rows per customer, the encoding is", fontsize=9.5)
+    _note(ax, 0.5, 3.2, "a quarter leak, and cross-validation cannot see it.", fontsize=9.5)
+    ax.add_patch(Rectangle((0.5, 1.2), 12.0, 1.5, facecolor=ok_l,
+                           edgecolor=ok, linewidth=1.4, zorder=1))
+    _code(ax, 0.8, 1.95, "fix: encode inside the fold, or from the past only",
+          color=ok, fontsize=10, weight="bold")
+
+    fig.suptitle("Four ways a validation score lies to you", fontsize=19,
+                 fontweight="bold", color=INK, x=0.02, ha="left")
+    fig.tight_layout(rect=(0, 0, 1, 0.95))
+    return _save(fig, save_to)
+
+
+def scaling_matters(save_to=None):
+    """Which model families care about the scale of a column, and why."""
+    fig, (ax_why, ax_who) = plt.subplots(1, 2, figsize=(15, 6.4), facecolor="white",
+                                         gridspec_kw={"width_ratios": [1.15, 1]})
+    bl, bd = ACCENTS["blue"]
+    ol, od = ACCENTS["orange"]
+
+    # left: the same two points, before and after scaling
+    _panel(ax_why, "the same two rows, two different geometries", (0, 12), (0, 10))
+    _code(ax_why, 0.3, 9.2, "age (years)  vs  income (rials)", fontsize=10, weight="bold")
+    pairs = [("row A", 30, 20_000_000), ("row B", 60, 20_400_000)]
+    for i, (name, age, inc) in enumerate(pairs):
+        _code(ax_why, 0.6, 8.2 - i * 0.7, f"{name}:  age={age}   income={inc:,}",
+              fontsize=9.3)
+    _note(ax_why, 0.3, 6.4, "Raw distance between them is dominated by income:")
+    _code(ax_why, 0.6, 5.7, "sqrt(30² + 400000²)  ≈  400000", fontsize=9.5, color=od)
+    _note(ax_why, 0.3, 4.9, "The age difference contributes nothing at all. After")
+    _note(ax_why, 0.3, 4.2, "standardising, both columns get an equal vote:")
+    _code(ax_why, 0.6, 3.5, "sqrt(1.4² + 0.3²)  ≈  1.4", fontsize=9.5, color=bd)
+    ax_why.add_patch(Rectangle((0.3, 1.0), 11.4, 1.9, facecolor=bl,
+                               edgecolor=bd, linewidth=1.4, zorder=1))
+    _code(ax_why, 0.6, 2.3, "Any model that measures distance, or penalises the",
+          fontsize=9.6)
+    _code(ax_why, 0.6, 1.6, "size of a coefficient, is affected by this.", fontsize=9.6)
+
+    # right: who cares
+    _panel(ax_who, "who cares about scale", (0, 11), (0, 10))
+    families = [
+        ("KNN, k-means", "yes — distance is the whole model", "red"),
+        ("SVM (RBF)", "yes — the kernel is a distance", "red"),
+        ("Ridge, Lasso", "yes — the penalty is on coefficient size", "red"),
+        ("neural networks", "yes — gradients behave badly otherwise", "red"),
+        ("linear regression (no penalty)", "no — but it converges faster", "grey"),
+        ("decision tree", "no — it only compares to a threshold", "green"),
+        ("random forest, boosting", "no — same reason", "green"),
+    ]
+    y = 8.9
+    for name, verdict, colour in families:
+        light, dark = ACCENTS[colour]
+        ax_who.add_patch(Rectangle((0.25, y - 0.5), 10.5, 0.95, facecolor=light,
+                                   edgecolor=dark, linewidth=1.0, zorder=1))
+        _code(ax_who, 0.5, y, name, color=dark, fontsize=9.4, weight="bold")
+        _note(ax_who, 4.7, y, verdict, fontsize=9.0)
+        y -= 1.15
+    _note(ax_who, 0.25, 0.5, "Keep the scaler in the Pipeline anyway: swapping "
+                             "the model\nthen costs one line instead of a rewrite.",
+          fontsize=9.3)
+
+    fig.suptitle("Why scaling matters, and to whom", fontsize=18,
+                 fontweight="bold", color=INK, x=0.02, ha="left")
+    fig.tight_layout(rect=(0, 0, 1, 0.93))
+    return _save(fig, save_to)
+
+
+def demand_problem(save_to=None):
+    """What the raw demand data is, and why it needs features at all."""
+    fig, axes = plt.subplots(1, 3, figsize=(16.5, 5.6), facecolor="white")
+    bl, bd = ACCENTS["blue"]
+    rl, rd = ACCENTS["red"]
+    gl, gd = ACCENTS["green"]
+
+    # --- 1. what one row of the raw table is -----------------------------
+    ax = axes[0]
+    _panel(ax, "what the data actually says", (0, 11), (0, 10))
+    _table(ax, ["date", "product", "sold"], [0, 1, 2, 3],
+           [["2026-03-01", "A-771", "3"], ["2026-03-01", "B-104", "1"],
+            ["2026-03-02", "A-771", "0"], ["2026-03-02", "B-104", "0"]],
+           x0=0.3, y0=9.3, cw=2.9, ch=0.95, index_w=0.9, fontsize=9)
+    _note(ax, 0.3, 3.9, "Three columns. A date, a product, a count.")
+    _note(ax, 0.3, 3.2, "Nothing about weather, price, the day of")
+    _note(ax, 0.3, 2.5, "the week, or what happened last Tuesday.")
+    ax.add_patch(Rectangle((0.3, 0.5), 10.4, 1.5, facecolor=bl,
+                           edgecolor=bd, linewidth=1.4, zorder=1))
+    _code(ax, 0.6, 1.25, "a model given only this can learn almost nothing",
+          color=bd, fontsize=9.6, weight="bold")
+
+    # --- 2. the features we have to manufacture --------------------------
+    ax = axes[1]
+    _panel(ax, "so we manufacture the context", (0, 11), (0, 10))
+    rows = [("from its own past", "what did it sell last week?", "blue"),
+            ("from the calendar", "is tomorrow a holiday?", "green"),
+            ("from what we did", "is it on promotion?", "orange"),
+            ("from its siblings", "what is the store doing?", "purple"),
+            ("from how it sells", "does it sell at all, ever?", "red")]
+    y = 8.9
+    for label, question, colour in rows:
+        light, dark = ACCENTS[colour]
+        ax.add_patch(Rectangle((0.3, y - 0.62), 10.4, 1.3, facecolor=light,
+                               edgecolor=dark, linewidth=1.2, zorder=1))
+        _code(ax, 0.6, y + 0.28, label, color=dark, fontsize=9.5, weight="bold")
+        _note(ax, 0.6, y - 0.3, question, fontsize=9.2)
+        y -= 1.62
+    _code(ax, 0.3, 0.5, "every one computed from BEFORE the day predicted",
+          color=rd, fontsize=9.5, weight="bold")
+
+    # --- 3. why sparsity is the whole problem ----------------------------
+    ax = axes[2]
+    _panel(ax, "and why it is hard: mostly zeros", (0, 11), (0, 10))
+    _code(ax, 0.3, 9.3, "one product, 40 days", fontsize=9.6, weight="bold")
+    # Fixed rather than random, so the caption below always matches the picture.
+    series = np.zeros(40, dtype=int)
+    for day, units in [(3, 2), (11, 1), (19, 3), (26, 1), (34, 2)]:
+        series[day] = units
+    for i, v in enumerate(series):
+        x, yy = 0.3 + (i % 20) * 0.52, 8.3 - (i // 20) * 0.75
+        ax.add_patch(Rectangle((x, yy), 0.44, 0.6,
+                               facecolor=bl if v else "white",
+                               edgecolor=bd if v else "#d7dee7", linewidth=1.0))
+        if v:
+            ax.text(x + 0.22, yy + 0.3, str(v), ha="center", va="center",
+                    fontsize=7.5, color=bd, **MONO)
+    _note(ax, 0.3, 6.4, "5 days with a sale out of 40. The rest are real")
+    _note(ax, 0.3, 5.7, "zeros, not missing data.")
+    ax.add_patch(Rectangle((0.3, 2.7), 10.4, 2.6, facecolor=rl,
+                           edgecolor=rd, linewidth=1.4, zorder=1))
+    _code(ax, 0.6, 4.75, "what that breaks", color=rd, fontsize=9.8, weight="bold")
+    _note(ax, 0.6, 4.1, "• the best constant guess is zero", fontsize=9.2)
+    _note(ax, 0.6, 3.55, "• MAE is minimised by predicting zero", fontsize=9.2)
+    _note(ax, 0.6, 3.0, "• a percentage error divides by zero", fontsize=9.2)
+    _code(ax, 0.3, 1.9, "so the model needs features about the", fontsize=9.3)
+    _code(ax, 0.3, 1.25, "sparsity itself, and a metric that survives it",
+          fontsize=9.3)
+
+    fig.suptitle("Why this problem needs feature engineering", fontsize=18,
+                 fontweight="bold", color=INK, x=0.02, ha="left")
+    fig.tight_layout(rect=(0, 0, 1, 0.93))
+    return _save(fig, save_to)
+
+
+def case_leak_stories(save_to=None):
+    """The two leaks that actually happened on the demand project."""
+    fig, (ax_price, ax_te) = plt.subplots(1, 2, figsize=(16, 7.4), facecolor="white")
+    rl, rd = ACCENTS["red"]
+    gl, gd = ACCENTS["green"]
+    yl, yd = ACCENTS["orange"]
+
+    # ---------------- leak 1: price only exists on selling days ----------
+    ax = ax_price
+    _panel(ax, "1 · the price column that was the answer", (0, 13), (0, 11))
+    _note(ax, 0.3, 10.2, "The sales export has one row per product per day "
+                         "SOLD.\nNo sale, no row — so price is null there.")
+
+    _table(ax, ["day", "sold", "price"], [1, 2, 3],
+           [["Mon", "3", "12,000"], ["Tue", "0", "—"], ["Wed", "5", "12,000"]],
+           x0=0.4, y0=8.6, cw=2.3, ch=0.85, index_w=0.8, fontsize=9)
+    ax.add_patch(Rectangle((8.0, 6.0), 4.6, 2.6, facecolor=rl,
+                           edgecolor=rd, linewidth=1.5, zorder=2))
+    _code(ax, 8.3, 8.1, "the model learns", color=rd, fontsize=9.5, weight="bold")
+    _code(ax, 8.3, 7.3, "price present", fontsize=9.2)
+    _code(ax, 8.3, 6.7, "  => it sold", fontsize=9.2)
+    _arrow(ax, (7.4, 7.3), (7.9, 7.3), color=rd, lw=1.6)
+
+    _code(ax, 0.4, 5.2, "P(sale | price present)", fontsize=9.6, weight="bold")
+    for x, label, val, colour in [(0.4, "before", "1.000", rd), (6.6, "after the fix", "0.101", gd)]:
+        light = rl if colour == rd else gl
+        ax.add_patch(Rectangle((x, 3.6), 5.6, 1.2, facecolor=light,
+                               edgecolor=colour, linewidth=1.4, zorder=1))
+        ax.text(x + 0.3, 4.2, f"{label}: {val}", fontsize=10.5, color=colour,
+                va="center", zorder=3, **MONO)
+    _note(ax, 6.6, 3.1, "= the base sale rate, so price now says nothing", fontsize=8.8)
+
+    ax.add_patch(Rectangle((0.4, 0.4), 12.2, 2.3, facecolor=yl,
+                           edgecolor=yd, linewidth=1.4, zorder=1))
+    _code(ax, 0.7, 2.15, "reported R² 0.427   →   real R² 0.128", color=yd,
+          fontsize=10.5, weight="bold")
+    _note(ax, 0.7, 1.5, "70% of the headline number was the leak. The fix was not", fontsize=9.2)
+    _note(ax, 0.7, 0.9, "dropping the feature — it was taking price from the shelf", fontsize=9.2)
+
+    # ---------------- leak 2: target encoding ----------------------------
+    ax = ax_te
+    _panel(ax, "2 · the encoding that contained the answer", (0, 13), (0, 11))
+    _note(ax, 0.3, 10.2, "Encode each product by its own average sales.\n"
+                         "Computed over the whole training period.")
+
+    for i, (day, val) in enumerate([("Mon", "3"), ("Tue", "0"), ("Wed", "6")]):
+        ax.add_patch(Rectangle((0.4 + i * 2.0, 7.6), 1.8, 0.9, facecolor=ACCENTS["grey"][0],
+                               edgecolor=ACCENTS["grey"][1], linewidth=1.1))
+        ax.text(1.3 + i * 2.0, 8.05, f"{day} {val}", ha="center", va="center",
+                fontsize=9, **MONO)
+    ax.add_patch(Rectangle((7.0, 7.6), 5.4, 0.9, facecolor=rl,
+                           edgecolor=rd, linewidth=1.5, zorder=2))
+    ax.text(9.7, 8.05, "te_mean = 3.0", ha="center", va="center", fontsize=10,
+            color=rd, zorder=3, **MONO)
+    _note(ax, 0.4, 6.7, "Tuesday's feature already contains Tuesday's answer.", fontsize=9.3)
+
+    ax.add_patch(Rectangle((0.4, 3.5), 12.0, 2.7, facecolor=gl,
+                           edgecolor=gd, linewidth=1.5, zorder=1))
+    _code(ax, 0.7, 5.6, "the time-series fix: expanding, as-of", color=gd,
+          fontsize=10, weight="bold")
+    _code(ax, 0.7, 4.85, "past = qty.groupby(product).shift(1)", fontsize=9.2)
+    _code(ax, 0.7, 4.25, "te_mean = past.expanding().mean()", fontsize=9.2)
+    _note(ax, 0.7, 3.8, "each day sees only that product's earlier days", fontsize=8.9)
+
+    _note(ax, 0.4, 2.5, "Not sklearn's TargetEncoder, which cross-fits by folds.", fontsize=9.3)
+    _note(ax, 0.4, 1.85, "On a time series a fold-based encoding lets January", fontsize=9.3)
+    _note(ax, 0.4, 1.2, "borrow from June. Time already gives the separation —", fontsize=9.3)
+    _note(ax, 0.4, 0.55, "and the value is reproducible live, which folds are not.", fontsize=9.3)
+
+    fig.suptitle("Two leaks that actually happened", fontsize=18,
+                 fontweight="bold", color=INK, x=0.02, ha="left")
+    fig.tight_layout(rect=(0, 0, 1, 0.94))
     return _save(fig, save_to)

@@ -15,23 +15,18 @@ you install anything.
 
 ## Week 3 — scikit-learn, features, validation and metrics
 
-One continuous session with lunch in the middle. Each half pairs a concepts
-notebook with the same ideas applied to a real internal forecasting problem.
-
 | # | Notebook | What it is |
 |---|---|---|
-| 04 | [`04_preprocessing_and_features.ipynb`](notebooks/04_preprocessing_and_features.ipynb) | scikit-learn's one interface, the preprocessing menu, `ColumnTransformer` and `Pipeline`, and the families of features worth building |
-| 05 | *case study* | the same thing on a real demand-forecasting panel — 90% zeros, 1.8M rows, and two leaks found the hard way |
-| 06 | [`06_modelling_and_evaluation.ipynb`](notebooks/06_modelling_and_evaluation.ipynb) | fitting a model, four ways your score lies, which cross-validation scheme, which metric, error analysis |
-| 07 | *case study* | the real experiments — model ladder, time splits, WMAPE, overstock/understock, and the grain that reversed the ranking |
+| 04 | [`04_from_table_to_model.ipynb`](notebooks/04_from_table_to_model.ipynb) | the whole middle of a project: scikit-learn's one interface, preprocessing, features, `Pipeline`, models, the four leaks, cross-validation, metrics, error analysis |
+| 05 | *case study* | the same ideas on a real demand-forecasting problem — 1.8M rows, 90% zeros, two leaks that actually happened, and an evaluation grain that mattered more than the model |
 
-Notebook 06 is the one to read if you only read one. Each leak is measured
-rather than described, and the target-encoding section makes a column with
-literally zero information look like the best feature in the model.
+Notebook 04 is built the same way as the NumPy and pandas labs: a **sheet** per
+section, then small examples to run and break, plus 20 numbered exercises you
+can work through on your own.
 
-The two case-study notebooks read an internal dataset that is not in this
-repository, so they are shown in the session rather than published. Everything
-they demonstrate is in 04 and 06 with data you can run.
+The case study reads an internal dataset that is not in this repository, so it
+is shown in the session rather than published. Everything it demonstrates is in
+notebook 04 with data you can run.
 
 Answers to the exercises are published here after the in-person session. Try
 them first.
@@ -67,10 +62,13 @@ you very little.
 | [`pandas_cheatsheet.png`](assets/pandas_cheatsheet.png) | anatomy, selection, the first-look ritual, groupby, merge |
 | [`ds_pipeline.png`](assets/ds_pipeline.png) | the nine stages of a project |
 | [`pipeline_anatomy.png`](assets/pipeline_anatomy.png) | what `ColumnTransformer` + `Pipeline` do to your columns, and why it has to be one object |
-| [`cv_schemes.png`](assets/cv_schemes.png) | KFold / Stratified / Group / TimeSeries, drawn fold by fold |
-| [`preprocessing_sheet.png`](assets/preprocessing_sheet.png) | the menu: missing values, scaling, categoricals, skew, dates |
-| [`feature_families.png`](assets/feature_families.png) | the families of features worth building on a panel |
+| [`sklearn_api.png`](assets/sklearn_api.png) | the estimator interface, and what lives behind it |
+| [`preprocessing_sheet.png`](assets/preprocessing_sheet.png) | the menu for one column: missing values, scaling, categoricals, skew, dates |
+| [`scaling_matters.png`](assets/scaling_matters.png) | which model families care about scale, and why |
+| [`leakage_gallery.png`](assets/leakage_gallery.png) | the four ways a validation score lies |
+| [`cv_schemes.png`](assets/cv_schemes.png) | which split, decided by three questions |
 | [`metrics_sheet.png`](assets/metrics_sheet.png) | regression metrics, what each hides, and the grain question |
+| [`feature_families.png`](assets/feature_families.png) | the families of features worth building on a panel |
 
 They are drawn by code rather than in a design tool, so they stay in version
 control and the numbers on them match the numbers the notebooks print. See

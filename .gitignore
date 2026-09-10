@@ -5,13 +5,12 @@ PRESENTER_NOTES.*.md
 
 # Exercise answers. These go up after the in-person session, not before it.
 notebooks/01_exercises_solutions.ipynb
-notebooks/06_exercises_solutions.ipynb
+notebooks/04_exercises_solutions.ipynb
 
 # Case studies on internal company data. They stay out until they are cleared
 # for release; they read a Parquet cache that is not in this repo either.
 notebooks/03_case_study_qcommerce.ipynb
-notebooks/05_case_feature_engineering.ipynb
-notebooks/07_case_experiments.ipynb
+notebooks/05_case_demand_forecasting.ipynb
 
 # --- environment -----------------------------------------------------------
 .venv/
